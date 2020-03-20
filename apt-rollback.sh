@@ -8,15 +8,15 @@
 # Instruct the Script to Abort for any command error...
 set -e
 
-echo "Ubuntu apt-RollBack Script - ver. 0.3"
-echo "-------------------------------------"
+echo "Ubuntu apt-RollBack Script - ver. 0.3.1"
+echo "---------------------------------------"
 
 # Main Variables...
-INSTALLED_PACKAGES=$(cat /var/log/apt/history.log | grep -A4 "Start-Date:" | tail -5 | grep "Install: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g")
-REMOVED_PACKAGES=$(cat /var/log/apt/history.log | grep -A4 "Start-Date:" | tail -5 | grep -e "Purge: " -e "Remove: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g")
+INSTALLED_PACKAGES=$(grep -A4 "Start-Date:" /var/log/apt/history.log | tail -5 | grep "Install: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g")
+REMOVED_PACKAGES=$(grep -A4 "Start-Date:" /var/log/apt/history.log | tail -5 | grep -e "Purge: " -e "Remove: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g")
 
 # Remove last Installed Packages...
-apt purge $INSTALLED_PACKAGES
+apt purge "$INSTALLED_PACKAGES"
 
 # Install last Removed Packages...
-apt install $REMOVED_PACKAGES
+apt install "$REMOVED_PACKAGES"
