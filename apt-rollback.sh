@@ -11,7 +11,7 @@ set -e
 # Main Variables...
 # --------------------------------------------------------------------------------
 LOG_FILE=/var/log/apt/history.log
-VERSION="0.6.1" # Use always the 'x.y.z' format 
+VERSION="0.6.5" # Use always the 'x.y.z' format 
 # --------------------------------------------------------------------------------
 
 # Main Functions...
@@ -32,7 +32,7 @@ function Yes_No ()
 {
   WARNING=""
   while true; do
-    read -r -p "$WARNING"$'\n'"$1 [y/N]? " YESNO
+    read -r -p "$WARNING$1 [y/N]? " YESNO
     if [ -z "$YESNO" ]; then
       echo "n"
       break
@@ -41,10 +41,10 @@ function Yes_No ()
         y|Y)
           echo "y"
           break;;
-        [n|N])
+        n|N])
           echo "n" 
           break;;
-        * ) WARNING="Please answer [y]es or [n]o.";;
+        * ) WARNING="Please answer [y]es or [n]o."$'\n';;
       esac
     fi
   done
@@ -53,7 +53,7 @@ function Yes_No ()
 
 # Main Code...
 # --------------------------------------------------------------------------------
-echo "apt-rollback - ver. $VERSION"
+echo "apt-rollback ver. $VERSION"
 echo "Undo the last APT command or a specified one"
 echo
 
@@ -90,8 +90,10 @@ fi
 if [ $# -eq 0 ]; then
   echo "No arguments supplied."
   usage_message
-  ANSWER=$(Yes_No "Do you wish to Undo the last APT command")
+  echo
+  ANSWER=$(Yes_No "Do you wish to see the last APT command")
   if [ "$ANSWER" == "y" ]; then
+    echo
     undo_last_command
   fi
 else
@@ -100,17 +102,21 @@ else
 fi
 
 if  [ -n "$INSTALLED_PACKAGES" ]; then
-  ANSWER=$(Yes_No "Do you wish to Uninstall the following package(s): $INSTALLED_PACKAGES")
+  echo "The last APT command was the Installation of the following packages: $INSTALLED_PACKAGES"
+  ANSWER=$(Yes_No "Do you wish to Undo it?")
   if [ "$ANSWER" == "y" ]; then
     # Remove last Installed Packages...
     apt purge -y "$INSTALLED_PACKAGES"
+    echo "Done"
   fi
 else
   if  [ -n "$REMOVED_PACKAGES" ]; then
-    ANSWER=$(Yes_No "Do you wish to Reinstall the following package(s): $REMOVED_PACKAGES")
+    echo "The last APT command was the Removing of the following packages: $REMOVED_PACKAGES"
+    ANSWER=$(Yes_No "Do you wish to Undo it?")
     if [ "$ANSWER" == "y" ]; then
       # Install last Removed Packages...
       apt install -y "$REMOVED_PACKAGES"
+      echo "Done"
     fi
   else
     if  [ -n "$UPGRADED_PACKAGES" ]; then
