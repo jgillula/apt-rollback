@@ -63,30 +63,6 @@ if [ ! -f "$LOG_FILE" ]; then
   exit 1
 fi
 
-if [ "$1" == "--last" ]; then
-  undo_last_command
-fi
-
-if [ "$1" == "--remove" ]; then
-  INSTALLED_PACKAGES=$(grep -m1 "Install: $2:" $LOG_FILE | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
-fi
-
-if [ "$1" == "--install" ]; then
-  REMOVED_PACKAGES=$(grep -m1 -e "Purge: $2:" -e "Remove: $2:" $LOG_FILE | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
-fi
-
-if [ "$1" == "--help" ]; then
-  usage_message;
-  echo "  --last      Undo the last APT command"
-  echo "              Supports the undo of the only Install, Remove and Purge commands"
-  echo "  --remove    Remove an INSTALLED package and all its configuration files"
-  echo "              Removing also all its first installed dependencies"
-  echo "  --install   Install a REMOVED package and all its first installed dependences"
-  echo "              Reproducing exactly its first installation"
-  echo "  --help      Print this help"
-  exit
-fi
-
 if [ $# -eq 0 ]; then
   echo "No arguments supplied."
   usage_message
@@ -97,8 +73,29 @@ if [ $# -eq 0 ]; then
     undo_last_command
   fi
 else
-  echo "'$1' is a wrong parameter"
-  usage_message
+  case "$1" in
+    "--last") undo_last_command
+      ;;
+    "--remove") INSTALLED_PACKAGES=$(grep -m1 "Install: $2:" $LOG_FILE | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+      ;;
+    "--install") REMOVED_PACKAGES=$(grep -m1 -e "Purge: $2:" -e "Remove: $2:" $LOG_FILE | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+      ;;
+    "--help") 
+      usage_message
+      echo
+      echo "  --last      Undo the last APT command"
+      echo "              Supports the undo of the only Install, Remove and Purge commands"
+      echo "  --remove    Remove an INSTALLED package and all its configuration files"
+      echo "              Removing also all its first installed dependencies"
+      echo "  --install   Install a REMOVED package and all its first installed dependences"
+      echo "              Reproducing exactly its first installation"
+      echo "  --help      Print this help"
+      echo
+      exit
+      ;;
+    *) echo "'$1' is a wrong parameter"
+      ;;
+  esac
 fi
 
 if  [ -n "$INSTALLED_PACKAGES" ]; then
