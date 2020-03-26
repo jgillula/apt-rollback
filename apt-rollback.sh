@@ -25,7 +25,7 @@ function undo_last_command ()
 
 function usage_message ()
 {
-  echo "Usage: apt-rollback [--last] [--remove/--install package-name] [--help]"
+  echo "Usage: apt-rollback [--last] [--remove/--reinstall package-name] [--help]"
 }
 
 function Yes_No ()
