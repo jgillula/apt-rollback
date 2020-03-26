@@ -11,7 +11,7 @@ set -e
 # Main Variables...
 # --------------------------------------------------------------------------------
 LOG_FILE=/var/log/apt/history.log
-VERSION="0.6.5" # Use always the 'x.y.z' format 
+VERSION="0.6.8" # Use always the 'x.y.z' format 
 # --------------------------------------------------------------------------------
 
 # Main Functions...
@@ -50,7 +50,7 @@ function Yes_No ()
   done
 }
 # --------------------------------------------------------------------------------
-
+    
 # Main Code...
 # --------------------------------------------------------------------------------
 echo "apt-rollback ver. $VERSION"
@@ -76,20 +76,24 @@ else
   case "$1" in
     "--last") undo_last_command
       ;;
-    "--remove") INSTALLED_PACKAGES=$(grep -m1 "Install: $2:" $LOG_FILE | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+    "--remove") INSTALLED_PACKAGES=$(grep "Install: " $LOG_FILE | grep " $2:" | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
       ;;
-    "--install") REMOVED_PACKAGES=$(grep -m1 -e "Purge: $2:" -e "Remove: $2:" $LOG_FILE | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+    "--install") REMOVED_PACKAGES=$(grep -e "Purge: " -e "Remove: " $LOG_FILE | grep " $2:" | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
       ;;
     "--help") 
       usage_message
       echo
-      echo "  --last      Undo the last APT command"
-      echo "              Supports the undo of the only Install, Remove and Purge commands"
-      echo "  --remove    Remove an INSTALLED package and all its configuration files"
-      echo "              Removing also all its first installed dependencies"
-      echo "  --install   Install a REMOVED package and all its first installed dependences"
-      echo "              Reproducing exactly its first installation"
-      echo "  --help      Print this help"
+      echo "  --last       Undo the last APT command"
+      echo "               Supports the undo of the only Install, Remove and Purge commands"
+      echo
+      echo "  --remove     Remove an INSTALLED package and related configuration files"
+      echo "               Removing also all its first installed dependencies"
+      echo
+      echo "  --reinstall  Reinstall a REMOVED package,"
+      echo "               and all its first installed dependences"
+      echo "               Reproducing exactly its first installation"
+      echo
+      echo "  --help       Print this help"
       echo
       exit
       ;;
@@ -99,8 +103,8 @@ else
 fi
 
 if  [ -n "$INSTALLED_PACKAGES" ]; then
-  echo "The last APT command was the Installation of the following packages: $INSTALLED_PACKAGES"
-  ANSWER=$(Yes_No "Do you wish to Undo it?")
+  echo -e "The selected APT command performed the 'INSTALL' of the following packages: \e[1m$INSTALLED_PACKAGES\e[0m"
+  ANSWER=$(Yes_No "Do you wish to REMOVE them?")
   if [ "$ANSWER" == "y" ]; then
     # Remove last Installed Packages...
     apt purge -y "$INSTALLED_PACKAGES"
@@ -108,8 +112,8 @@ if  [ -n "$INSTALLED_PACKAGES" ]; then
   fi
 else
   if  [ -n "$REMOVED_PACKAGES" ]; then
-    echo "The last APT command was the Removing of the following packages: $REMOVED_PACKAGES"
-    ANSWER=$(Yes_No "Do you wish to Undo it?")
+    echo -e "The selected APT command performed the 'REMOVE' of the following packages: \e[1m$REMOVED_PACKAGES\e[0m"
+    ANSWER=$(Yes_No "Do you wish to RE-INSTALL them?")
     if [ "$ANSWER" == "y" ]; then
       # Install last Removed Packages...
       apt install -y "$REMOVED_PACKAGES"
