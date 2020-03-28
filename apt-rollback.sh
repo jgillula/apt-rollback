@@ -11,13 +11,15 @@ set -e
 # Main Variables...
 # --------------------------------------------------------------------------------
 LOG_FILE=/var/log/apt/history.log
-VERSION="0.6.8" # Use always the 'x.y.z' format 
+VERSION="0.7.1" # Use always the 'x.y.z' format
+OPERATION="selected"
 # --------------------------------------------------------------------------------
 
 # Main Functions...
 # --------------------------------------------------------------------------------
 function undo_last_command ()
 {
+  OPERATION="last"
   INSTALLED_PACKAGES=$(grep -A4 "Start-Date:" $LOG_FILE | tail -5 | grep "Install: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
   REMOVED_PACKAGES=$(grep -A4 "Start-Date:" $LOG_FILE | tail -5 | grep -e "Purge: " -e "Remove: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
   UPGRADED_PACKAGES=$(grep -A4 "Start-Date:" $LOG_FILE | tail -5 | grep "Upgrade: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
@@ -78,7 +80,7 @@ else
       ;;
     "--remove") INSTALLED_PACKAGES=$(grep "Install: " $LOG_FILE | grep " $2:" | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
       ;;
-    "--install") REMOVED_PACKAGES=$(grep -e "Purge: " -e "Remove: " $LOG_FILE | grep " $2:" | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+    "--reinstall") REMOVED_PACKAGES=$(grep -e "Purge: " -e "Remove: " $LOG_FILE | grep " $2:" | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
       ;;
     "--help") 
       usage_message
@@ -103,7 +105,8 @@ else
 fi
 
 if  [ -n "$INSTALLED_PACKAGES" ]; then
-  echo -e "The selected APT command performed the 'INSTALL' of the following packages: \e[1m$INSTALLED_PACKAGES\e[0m"
+  echo -e "The $OPERATION APT command, performed the 'INSTALL' of the following packages: \e[1;32m$INSTALLED_PACKAGES\e[0m"
+  echo
   ANSWER=$(Yes_No "Do you wish to REMOVE them?")
   if [ "$ANSWER" == "y" ]; then
     # Remove last Installed Packages...
@@ -112,7 +115,8 @@ if  [ -n "$INSTALLED_PACKAGES" ]; then
   fi
 else
   if  [ -n "$REMOVED_PACKAGES" ]; then
-    echo -e "The selected APT command performed the 'REMOVE' of the following packages: \e[1m$REMOVED_PACKAGES\e[0m"
+    echo -e "The $OPERATION APT command, performed the 'REMOVE' of the following packages: \e[1;32m$REMOVED_PACKAGES\e[0m"
+    echo
     ANSWER=$(Yes_No "Do you wish to RE-INSTALL them?")
     if [ "$ANSWER" == "y" ]; then
       # Install last Removed Packages...
