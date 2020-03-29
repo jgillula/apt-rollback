@@ -16,3 +16,11 @@ Undo the last APT command or a specified one
                    Reproducing exactly its first installation
 
       --help       Print the help
+
+### TO INSTALL:
+
+    wget https://gitlab.com/fabio.dellaria/apt-rollback/-/raw/master/apt-rollback.sh && chmod +x ./apt-rollback.sh
+
+### TO USE:
+
+    ./apt-rollback.sh
