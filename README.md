@@ -24,3 +24,7 @@ Undo the last APT command or a specified one
 ### TO USE:
 
     ./apt-rollback.sh
+
+### A Little Demo...
+
+![Demo Image](https://gitlab.com/fabio.dellaria/apt-rollback/-/raw/master/apt-rollback.gif)
