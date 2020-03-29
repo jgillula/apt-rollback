@@ -11,7 +11,7 @@ set -e
 # Main Variables...
 # --------------------------------------------------------------------------------
 LOG_FILE=/var/log/apt/history.log
-VERSION="0.7.1" # Use always the 'x.y.z' format
+VERSION="0.7.2" # Use always the 'x.y.z' format
 OPERATION="selected"
 # --------------------------------------------------------------------------------
 
@@ -51,6 +51,12 @@ function Yes_No ()
     fi
   done
 }
+
+function First_Installation ()
+{
+  OUTPUT=$(grep -m1 -E "Install: .*$1:" $LOG_FILE | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+  echo "$OUTPUT"
+}
 # --------------------------------------------------------------------------------
     
 # Main Code...
@@ -78,9 +84,9 @@ else
   case "$1" in
     "--last") undo_last_command
       ;;
-    "--remove") INSTALLED_PACKAGES=$(grep "Install: " $LOG_FILE | grep " $2:" | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+    "--remove") INSTALLED_PACKAGES=$(First_Installation "$2")
       ;;
-    "--reinstall") REMOVED_PACKAGES=$(grep -e "Purge: " -e "Remove: " $LOG_FILE | grep " $2:" | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+    "--reinstall") REMOVED_PACKAGES=$(First_Installation "$2")
       ;;
     "--help") 
       usage_message
@@ -109,9 +115,12 @@ if  [ -n "$INSTALLED_PACKAGES" ]; then
   echo
   ANSWER=$(Yes_No "Do you wish to REMOVE them?")
   if [ "$ANSWER" == "y" ]; then
+    echo
     # Remove last Installed Packages...
-    apt purge -y "$INSTALLED_PACKAGES"
+    apt-get purge -y -qq $INSTALLED_PACKAGES
+    echo
     echo "Done"
+    echo
   fi
 else
   if  [ -n "$REMOVED_PACKAGES" ]; then
@@ -119,9 +128,12 @@ else
     echo
     ANSWER=$(Yes_No "Do you wish to RE-INSTALL them?")
     if [ "$ANSWER" == "y" ]; then
+      echo
       # Install last Removed Packages...
-      apt install -y "$REMOVED_PACKAGES"
+      apt-get install -y -qq $REMOVED_PACKAGES
+      echo
       echo "Done"
+      echo
     fi
   else
     if  [ -n "$UPGRADED_PACKAGES" ]; then
