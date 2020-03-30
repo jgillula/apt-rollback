@@ -1,5 +1,5 @@
 #!/bin/bash
-# Ubuntu apt-rollback Script
+# apt-rollback Script
 # By Fabio Dell'Aria - fabio.dellaria@gmail.com - Mar 2020
 
 # Check if the current user is "root" otherwise restart the script with "sudo"...
@@ -11,7 +11,7 @@ set -e
 # Main Variables...
 # --------------------------------------------------------------------------------
 LOG_FILE=/var/log/apt/history.log
-VERSION="0.7.2" # Use always the 'x.y.z' format
+VERSION="0.8.0" # Use always the 'x.y.z' format
 OPERATION="selected"
 # --------------------------------------------------------------------------------
 
@@ -116,10 +116,16 @@ if  [ -n "$INSTALLED_PACKAGES" ]; then
   ANSWER=$(Yes_No "Do you wish to REMOVE them?")
   if [ "$ANSWER" == "y" ]; then
     echo
+    echo -n -e "Working:\e[1;32m"
     # Remove last Installed Packages...
-    apt-get purge -y -qq $INSTALLED_PACKAGES
+    apt-get purge -y -qq $INSTALLED_PACKAGES > /dev/null &
+    #  echo dots while command is executing
+    while ps | grep $! &>/dev/null; do
+      echo -n "."
+      sleep 0.5
+    done
     echo
-    echo "Done"
+    echo -e "\e[0mDone"
     echo
   fi
 else
@@ -129,10 +135,16 @@ else
     ANSWER=$(Yes_No "Do you wish to RE-INSTALL them?")
     if [ "$ANSWER" == "y" ]; then
       echo
+      echo -n -e "Working:\e[1;32m"
       # Install last Removed Packages...
-      apt-get install -y -qq $REMOVED_PACKAGES
+      apt-get install -y -qq $REMOVED_PACKAGES > /dev/null &
+      #  echo dots while command is executing
+      while ps | grep $! &>/dev/null; do
+        echo -n "."
+        sleep 0.5
+      done
       echo
-      echo "Done"
+      echo -e "\e[0mDone"
       echo
     fi
   else
