@@ -3,9 +3,9 @@
 Undo the last APT command or a specified one
 
 
-    Usage: apt-rollback [--last] [--remove/--reinstall package-name] [--help]
+    Usage: apt-rollback [--last <n>] [--remove/--reinstall package-name] [--help]
 
-      --last       Undo the last APT command
+      --last       Undo the last <n> APT commands
                    Supports the undo of the only Install, Remove and Purge commands
     
       --remove     Remove an INSTALLED package and related configuration files
