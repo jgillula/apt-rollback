@@ -19,11 +19,11 @@ Undo the last APT command or a specified one
 
 ### TO INSTALL:
 
-    wget https://gitlab.com/fabio.dellaria/apt-rollback/-/raw/master/apt-rollback.sh && chmod +x ./apt-rollback.sh
+    wget https://gitlab.com/fabio.dellaria/apt-rollback/-/raw/master/apt-rollback && chmod +x ./apt-rollback
 
 ### TO USE:
 
-    ./apt-rollback.sh
+    ./apt-rollback
 
 ### A Little Demo...
 
