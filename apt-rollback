@@ -11,27 +11,101 @@ set -e
 # Main Variables...
 # --------------------------------------------------------------------------------
 LOG_FILE=/var/log/apt/history.log
-VERSION="0.8.0" # Use always the 'x.y.z' format
-OPERATION="selected"
+VERSION="0.8.8" # Use always the 'x.y.z' format
 # --------------------------------------------------------------------------------
 
 # Main Functions...
 # --------------------------------------------------------------------------------
-function undo_last_command ()
-{
-  OPERATION="last"
-  INSTALLED_PACKAGES=$(grep -A4 "Start-Date:" $LOG_FILE | tail -5 | grep "Install: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
-  REMOVED_PACKAGES=$(grep -A4 "Start-Date:" $LOG_FILE | tail -5 | grep -e "Purge: " -e "Remove: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
-  UPGRADED_PACKAGES=$(grep -A4 "Start-Date:" $LOG_FILE | tail -5 | grep "Upgrade: " | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+function undo_last_command() {
+  [[ $1 = "" ]] && LAST="1" || LAST="$1"
+  INT_REG='^[0-9]+$'
+  if ! [[ $LAST =~ $INT_REG ]] ; then
+    echo "You have to enter a valid integer value for the '--last' parameter"
+    exit 1
+  fi
+  if [ "$LAST" == "1" ]; then
+   COUNT=""
+   PLUS=""
+   PRONOUN="it"
+  else
+    COUNT=" $LAST"
+    PLUS="s"
+    PRONOUN="them"
+  fi
+  OLD_IFS="$IFS"
+  COMMANDS_LIST=$(grep -E "(Install|Remove|Purge|Upgrade): " $LOG_FILE | tail -"$LAST" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g' | tac)
+  IFS=$'\n'
+  echo "The last$COUNT APT command$PLUS, performed the following Package$PLUS operation$PLUS..."
+  echo
+  N=0
+  STOP="True"
+  for COMMAND_LINE in $COMMANDS_LIST; do
+    let "N=N+1"
+    COMMAND=$(echo "$COMMAND_LINE" | cut -d":" -f1)
+    PACKAGES=$(echo "$COMMAND_LINE" | cut -d" " -f2-)
+    if [ ! "$LAST" == "1" ]; then
+      echo -e -n "\e[1;34m#$N\e[0m: "
+    fi
+    if [ "$COMMAND" == "Upgrade" ]; then
+      echo -e -n "\e[1;31mUNSUPPORTED\e[0m: "
+    else
+      STOP="False"
+    fi
+    echo -e "$COMMAND of \e[1;32m$PACKAGES\e[0m"
+  done
+  if [ "$STOP" == "False" ]; then
+    echo
+    ANSWER=$(Yes_No "Do you wish to Undo $PRONOUN?")
+    echo
+    if [ "$ANSWER" == "y" ]; then
+      for COMMAND_LINE in $COMMANDS_LIST; do
+        echo -n -e "Undoing Command"
+        if [ ! "$LAST" == "1" ]; then
+          echo -e -n " \e[1;34m#$N\e[0m"
+        fi
+        echo -e -n ":\e[1;32m"
+        # Working...
+        COMMAND=$(echo "$COMMAND_LINE" | cut -d":" -f1)
+        PACKAGES=$(echo "$COMMAND_LINE" | cut -d" " -f2-)
+        case $COMMAND in
+          "Install") COMMAND="purge" ;;
+          "Purge" | "Remove") COMMAND="install" ;;
+          "Upgrade") COMMAND="" ;;
+        esac
+        if [ ! "$COMMAND" == "" ]; then
+          IFS="$OLD_IFS"
+          apt-get $COMMAND -y -qq $PACKAGES >/dev/null &
+          IFS=$'\n'
+          #  echo dots while command is executing
+          while ps | grep $! &>/dev/null; do
+            echo -n "."
+            sleep 0.5
+          done
+        else
+          echo -e " \e[1;31mSKIPPED\e[0m (Undo 'Upgrade' is currently unsupported')"
+        fi
+        IFS="$OLD_IFS"
+        echo
+        echo -e "\e[0mDone"
+        echo
+        let "N=N-1"
+      done
+    fi
+  else
+    echo
+    echo "apt-rollback supports the Undo only of the Install, Remove and Purge commands"
+    echo "Upgrade commands aren't currently supported!"
+    echo
+    exit 1
+  fi
+  exit
 }
 
-function usage_message ()
-{
-  echo "Usage: apt-rollback [--last] [--remove/--reinstall package-name] [--help]"
+function usage_message() {
+  echo "Usage: apt-rollback [--last <n>] [--remove/--reinstall package-name] [--help]"
 }
 
-function Yes_No ()
-{
+function Yes_No() {
   WARNING=""
   while true; do
     read -r -p "$WARNING$1 [y/N]? " YESNO
@@ -40,29 +114,30 @@ function Yes_No ()
       break
     else
       case $YESNO in
-        y|Y)
-          echo "y"
-          break;;
-        n|N])
-          echo "n" 
-          break;;
-        * ) WARNING="Please answer [y]es or [n]o."$'\n';;
+      y | Y)
+        echo "y"
+        break
+        ;;
+      n | N])
+        echo "n"
+        break
+        ;;
+      *) WARNING="Please answer [y]es or [n]o."$'\n' ;;
       esac
     fi
   done
 }
 
-function First_Installation ()
-{
+function First_Installation() {
   OUTPUT=$(grep -m1 -E "Install: .*$1:" $LOG_FILE | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
   echo "$OUTPUT"
 }
 # --------------------------------------------------------------------------------
-    
+
 # Main Code...
 # --------------------------------------------------------------------------------
 echo "apt-rollback ver. $VERSION"
-echo "Undo the last APT command or a specified one"
+echo "Undo the last APT commands or a specified one"
 echo
 
 if [ ! -f "$LOG_FILE" ]; then
@@ -78,47 +153,46 @@ if [ $# -eq 0 ]; then
   ANSWER=$(Yes_No "Do you wish to see the last APT command")
   if [ "$ANSWER" == "y" ]; then
     echo
-    undo_last_command
+    undo_last_command "1"
   fi
 else
   case "$1" in
-    "--last") undo_last_command
-      ;;
-    "--remove") INSTALLED_PACKAGES=$(First_Installation "$2")
-      ;;
-    "--reinstall") REMOVED_PACKAGES=$(First_Installation "$2")
-      ;;
-    "--help") 
-      usage_message
-      echo
-      echo "  --last       Undo the last APT command"
-      echo "               Supports the undo of the only Install, Remove and Purge commands"
-      echo
-      echo "  --remove     Remove an INSTALLED package and related configuration files"
-      echo "               Removing also all its first installed dependencies"
-      echo
-      echo "  --reinstall  Reinstall a REMOVED package,"
-      echo "               and all its first installed dependences"
-      echo "               Reproducing exactly its first installation"
-      echo
-      echo "  --help       Print this help"
-      echo
-      exit
-      ;;
-    *) echo "'$1' is a wrong parameter"
-      ;;
+  "--last")
+    undo_last_command "$2" ;;
+  "--remove")
+    INSTALLED_PACKAGES=$(First_Installation "$2") ;;
+  "--reinstall")
+    REMOVED_PACKAGES=$(First_Installation "$2") ;;
+  "--help")
+    usage_message
+    echo
+    echo "  --last       Undo the last <n> APT commands"
+    echo "               Supports the undo of the only Install, Remove and Purge commands"
+    echo
+    echo "  --remove     Remove an INSTALLED package and related configuration files"
+    echo "               Removing also all its first installed dependencies"
+    echo
+    echo "  --reinstall  Reinstall a REMOVED package,"
+    echo "               and all its first installed dependences"
+    echo "               Reproducing exactly its first installation"
+    echo
+    echo "  --help       Print this help"
+    echo
+    exit ;;
+  *)
+    echo "'$1' is a wrong parameter" ;;
   esac
 fi
 
-if  [ -n "$INSTALLED_PACKAGES" ]; then
-  echo -e "The $OPERATION APT command, performed the 'INSTALL' of the following packages: \e[1;32m$INSTALLED_PACKAGES\e[0m"
+if [ -n "$INSTALLED_PACKAGES" ]; then
+  echo -e "The selected APT command, performed the 'INSTALL' of the following packages: \e[1;32m$INSTALLED_PACKAGES\e[0m"
   echo
   ANSWER=$(Yes_No "Do you wish to REMOVE them?")
   if [ "$ANSWER" == "y" ]; then
     echo
     echo -n -e "Working:\e[1;32m"
     # Remove last Installed Packages...
-    apt-get purge -y -qq $INSTALLED_PACKAGES > /dev/null &
+    apt-get purge -y -qq $INSTALLED_PACKAGES >/dev/null &
     #  echo dots while command is executing
     while ps | grep $! &>/dev/null; do
       echo -n "."
@@ -129,15 +203,15 @@ if  [ -n "$INSTALLED_PACKAGES" ]; then
     echo
   fi
 else
-  if  [ -n "$REMOVED_PACKAGES" ]; then
-    echo -e "The $OPERATION APT command, performed the 'REMOVE' of the following packages: \e[1;32m$REMOVED_PACKAGES\e[0m"
+  if [ -n "$REMOVED_PACKAGES" ]; then
+    echo -e "The selected APT command, performed the 'REMOVE' of the following packages: \e[1;32m$REMOVED_PACKAGES\e[0m"
     echo
     ANSWER=$(Yes_No "Do you wish to RE-INSTALL them?")
     if [ "$ANSWER" == "y" ]; then
       echo
       echo -n -e "Working:\e[1;32m"
       # Install last Removed Packages...
-      apt-get install -y -qq $REMOVED_PACKAGES > /dev/null &
+      apt-get install -y -qq $REMOVED_PACKAGES >/dev/null &
       #  echo dots while command is executing
       while ps | grep $! &>/dev/null; do
         echo -n "."
@@ -147,15 +221,5 @@ else
       echo -e "\e[0mDone"
       echo
     fi
-  else
-    if  [ -n "$UPGRADED_PACKAGES" ]; then
-      echo "The last APT command was an Upgrade ($UPGRADED_PACKAGES)."
-      echo "Currently, apt-rollback can undo only Installs and Removes/Purges operations."
-      echo
-    else
-      echo "No operation to undo found."
-      echo
-    fi
   fi
 fi
-
