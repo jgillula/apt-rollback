@@ -11,7 +11,7 @@ set -e
 # Main Variables...
 # --------------------------------------------------------------------------------
 LOG_FILE=/var/log/apt/history.log
-VERSION="0.8.8" # Use always the 'x.y.z' format
+VERSION="0.9.0" # Use always the 'x.y.z' format
 # --------------------------------------------------------------------------------
 
 # Main Functions...
@@ -58,15 +58,15 @@ function undo_last_command() {
     ANSWER=$(Yes_No "Do you wish to Undo $PRONOUN?")
     echo
     if [ "$ANSWER" == "y" ]; then
+      N=1
       for COMMAND_LINE in $COMMANDS_LIST; do
-        echo -n -e "Undoing Command"
-        if [ ! "$LAST" == "1" ]; then
-          echo -e -n " \e[1;34m#$N\e[0m"
-        fi
-        echo -e -n ":\e[1;32m"
         # Working...
         COMMAND=$(echo "$COMMAND_LINE" | cut -d":" -f1)
         PACKAGES=$(echo "$COMMAND_LINE" | cut -d" " -f2-)
+        if [ ! "$LAST" == "1" ]; then
+          echo -e -n "\e[1;34m#$N\e[0m "
+        fi
+        echo -e "UNDOING: $COMMAND of \e[1;32m${PACKAGES:0:40}..."
         case $COMMAND in
           "Install") COMMAND="purge" ;;
           "Purge" | "Remove") COMMAND="install" ;;
@@ -86,9 +86,8 @@ function undo_last_command() {
         fi
         IFS="$OLD_IFS"
         echo
-        echo -e "\e[0mDone"
-        echo
-        let "N=N-1"
+        echo -e "\e[0m"
+        let "N=N+1"
       done
     fi
   else
@@ -180,7 +179,10 @@ else
     echo
     exit ;;
   *)
-    echo "'$1' is a wrong parameter" ;;
+    echo "'$1' is a wrong parameter"
+    echo
+    usage_message
+    echo ;;
   esac
 fi
 
