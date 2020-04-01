@@ -10,8 +10,8 @@ set -e
 
 # Main Variables...
 # --------------------------------------------------------------------------------
-LOG_FILE=/var/log/apt/history.log
-VERSION="0.9.0" # Use always the 'x.y.z' format
+LOG_FILE="/var/log/apt/history.log"
+VERSION="0.9.5" # Use always the 'x.y.z' format
 # --------------------------------------------------------------------------------
 
 # Main Functions...
@@ -33,7 +33,13 @@ function undo_last_command() {
     PRONOUN="them"
   fi
   OLD_IFS="$IFS"
-  COMMANDS_LIST=$(grep -E "(Install|Remove|Purge|Upgrade): " $LOG_FILE | tail -"$LAST" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g' | tac)
+  if [ -f "$LOG_FILE.1.gz" ]; then
+    COMMANDS_LIST_GZIP=$(zgrep -E "(Install|Remove|Purge|Upgrade): " "$LOG_FILE.1.gz" | tail -"$LAST")"\n"
+  else
+    COMMANDS_LIST_GZIP=""
+  fi
+  COMMANDS_LIST_PLAIN=$(grep -E "(Install|Remove|Purge|Upgrade): " "$LOG_FILE" | tail -"$LAST")
+  COMMANDS_LIST=$(echo -e "$COMMANDS_LIST_GZIP$COMMANDS_LIST_PLAIN" | tail -"$LAST" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g' | tac)
   IFS=$'\n'
   echo "The last$COUNT APT command$PLUS, performed the following Package$PLUS operation$PLUS..."
   echo
@@ -128,8 +134,14 @@ function Yes_No() {
 }
 
 function First_Installation() {
-  OUTPUT=$(grep -m1 -E "Install: .*$1:" $LOG_FILE | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
-  echo "$OUTPUT"
+  if [ -f "$LOG_FILE.1.gz" ]; then
+    COMMAND_GZIP=$(zgrep -m1 -E "Install: .*$1:" "$LOG_FILE.1.gz")"\n"
+  else
+    COMMAND_GZIP=""
+  fi
+  COMMAND_PLAIN=$(grep -m1 -E "Install: .*$1:" "$LOG_FILE")
+  COMMAND=$(echo -e "$COMMAND_GZIP$COMMAND_PLAIN" | tail -1 | cut -d" " -f2- | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+  echo "$COMMAND"
 }
 # --------------------------------------------------------------------------------
 
