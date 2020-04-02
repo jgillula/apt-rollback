@@ -11,7 +11,7 @@ set -e
 # Main Variables...
 # --------------------------------------------------------------------------------
 LOG_FILE="/var/log/apt/history.log"
-VERSION="0.9.5" # Use always the 'x.y.z' format
+VERSION="0.9.8" # Use always the 'x.y.z' format
 # --------------------------------------------------------------------------------
 
 # Main Functions...
@@ -19,14 +19,14 @@ VERSION="0.9.5" # Use always the 'x.y.z' format
 function undo_last_command() {
   [[ $1 = "" ]] && LAST="1" || LAST="$1"
   INT_REG='^[0-9]+$'
-  if ! [[ $LAST =~ $INT_REG ]] ; then
+  if ! [[ $LAST =~ $INT_REG ]]; then
     echo "You have to enter a valid integer value for the '--last' parameter"
     exit 1
   fi
   if [ "$LAST" == "1" ]; then
-   COUNT=""
-   PLUS=""
-   PRONOUN="it"
+    COUNT=""
+    PLUS=""
+    PRONOUN="it"
   else
     COUNT=" $LAST"
     PLUS="s"
@@ -39,69 +39,119 @@ function undo_last_command() {
     COMMANDS_LIST_GZIP=""
   fi
   COMMANDS_LIST_PLAIN=$(grep -E "(Install|Remove|Purge|Upgrade): " "$LOG_FILE" | tail -"$LAST")
-  COMMANDS_LIST=$(echo -e "$COMMANDS_LIST_GZIP$COMMANDS_LIST_PLAIN" | tail -"$LAST" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g' | tac)
+  COMMANDS_LIST=$(echo -e "$COMMANDS_LIST_GZIP$COMMANDS_LIST_PLAIN" | tail -"$LAST" | tac)
   IFS=$'\n'
   echo "The last$COUNT APT command$PLUS, performed the following Package$PLUS operation$PLUS..."
   echo
   N=0
-  STOP="True"
   for COMMAND_LINE in $COMMANDS_LIST; do
     let "N=N+1"
-    COMMAND=$(echo "$COMMAND_LINE" | cut -d":" -f1)
-    PACKAGES=$(echo "$COMMAND_LINE" | cut -d" " -f2-)
+    LINE=$(echo -e "$COMMAND_LINE" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+    COMMAND=$(echo "$LINE" | cut -d":" -f1)
+    PACKAGES=$(echo "$LINE" | cut -d" " -f2-)
     if [ ! "$LAST" == "1" ]; then
       echo -e -n "\e[1;34m#$N\e[0m: "
     fi
-    if [ "$COMMAND" == "Upgrade" ]; then
-      echo -e -n "\e[1;31mUNSUPPORTED\e[0m: "
-    else
-      STOP="False"
-    fi
     echo -e "$COMMAND of \e[1;32m$PACKAGES\e[0m"
   done
-  if [ "$STOP" == "False" ]; then
-    echo
-    ANSWER=$(Yes_No "Do you wish to Undo $PRONOUN?")
-    echo
-    if [ "$ANSWER" == "y" ]; then
-      N=1
-      for COMMAND_LINE in $COMMANDS_LIST; do
-        # Working...
-        COMMAND=$(echo "$COMMAND_LINE" | cut -d":" -f1)
-        PACKAGES=$(echo "$COMMAND_LINE" | cut -d" " -f2-)
-        if [ ! "$LAST" == "1" ]; then
-          echo -e -n "\e[1;34m#$N\e[0m "
-        fi
-        echo -e "UNDOING: $COMMAND of \e[1;32m${PACKAGES:0:40}..."
-        case $COMMAND in
-          "Install") COMMAND="purge" ;;
-          "Purge" | "Remove") COMMAND="install" ;;
-          "Upgrade") COMMAND="" ;;
-        esac
-        if [ ! "$COMMAND" == "" ]; then
+  echo
+  ANSWER=$(Yes_No "Do you wish to Undo $PRONOUN?")
+  echo
+  if [ "$ANSWER" == "y" ]; then
+    N=1
+    for COMMAND_LINE in $COMMANDS_LIST; do
+      # Working...
+      LINE=$(echo -e "$COMMAND_LINE" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
+      COMMAND=$(echo "$LINE" | cut -d":" -f1)
+      PACKAGES=$(echo "$LINE" | cut -d" " -f2-)
+      if [ ! "$LAST" == "1" ]; then
+        echo -e -n "\e[1;34m#$N\e[0m "
+      fi
+      echo -e "UNDOING: $COMMAND of \e[1;32m${PACKAGES:0:40}..."
+      case $COMMAND in
+      "Install") COMMAND="purge" ;;
+      "Purge" | "Remove") COMMAND="install" ;;
+      "Upgrade") COMMAND="" ;;
+      esac
+      if [ ! "$COMMAND" == "" ]; then
+        IFS="$OLD_IFS"
+#          apt-get $COMMAND -y -qq $PACKAGES >/dev/null &
+        IFS=$'\n'
+        #  echo dots while command is executing
+        while ps | grep $! &>/dev/null; do
+          echo -n "."
+          sleep 0.5
+        done
+      else
+        IFS=')'
+        DPKG_COMMAND=""
+        LOG_COMMAND=""
+        COMMANDS=$(echo "$COMMAND_LINE" | cut -d" " -f2-)
+        for SINGLE_PACKAGE in $COMMANDS; do
+          SINGLE_PACKAGE=$(echo "$SINGLE_PACKAGE" | sed 's/^, //')
+          PACKAGE_NAME=$(echo "$SINGLE_PACKAGE" | cut -d':' -f1)
+          PACKAGE_ARC=$(echo "$SINGLE_PACKAGE" | cut -d':' -f2 | cut -d' ' -f1)
+          PACKAGE_OLD_VER=$(echo "$SINGLE_PACKAGE" | cut -d'(' -f2 | cut -d',' -f1)
+          PACKAGE_NEW_VER=$(echo "$SINGLE_PACKAGE" | cut -d',' -f2 | sed 's/^ //')
+          LOG_SINGLE_PACKAGE="$PACKAGE_NAME:$PACKAGE_ARC ($PACKAGE_NEW_VER, $PACKAGE_OLD_VER)"
+          if [ "$LOG_COMMAND" == "" ]; then
+            LOG_COMMAND="Upgrade: $LOG_SINGLE_PACKAGE"
+          else
+            LOG_COMMAND="$LOG_COMMAND, $LOG_SINGLE_PACKAGE"
+          fi
+          GENERIC_DEB_FILE="/var/cache/apt/archives/${PACKAGE_NAME}_${PACKAGE_OLD_VER}_"
+          ARC_DEB_FILE="${GENERIC_DEB_FILE}${PACKAGE_ARC}.deb"
+          ALL_DEB_FILE="${GENERIC_DEB_FILE}all.deb"
+          if [ -f "$ARC_DEB_FILE" ]; then
+            DEB_FILE="$ARC_DEB_FILE"
+          else
+            if [ -f "$ALL_DEB_FILE" ]; then
+              DEB_FILE="$ALL_DEB_FILE"
+            else
+              DEB_FILE=""
+            fi
+          fi
+          if [ "$DEB_FILE" == "" ]; then
+            echo -e "$ERROR: $PACKAGE_NAME Ver. $PACKAGE_OLD_VER currently \e[1;31mNOT AVAILABLE\e[0m on the system cache"
+            DPKG_COMMAND=""
+            break;
+          else
+            if [ ! "$DPKG_COMMAND" == "" ]; then
+              DPKG_COMMAND="$DPKG_COMMAND $DEB_FILE"
+            else
+              DPKG_COMMAND="$DEB_FILE"
+            fi
+          fi            
+        done
+        if [ ! "$DPKG_COMMAND" == "" ]; then
           IFS="$OLD_IFS"
-          apt-get $COMMAND -y -qq $PACKAGES >/dev/null &
+          USER_NAME="$SUDO_USER"
+          USER_ID="$(id -u $USER_NAME)"
+          START_DATE=$(date "+%Y-%m-%d  %H:%M:%S")
+          dpkg -i $DPKG_COMMAND >/dev/null &
           IFS=$'\n'
-          #  echo dots while command is executing
           while ps | grep $! &>/dev/null; do
             echo -n "."
             sleep 0.5
           done
+          END_DATE=$(date "+%Y-%m-%d  %H:%M:%S")
+          {
+            echo "Start-Date: $START_DATE"
+            echo "Commandline: dpkg -i $DPKG_COMMAND >/dev/null"
+            echo "Requested-By: $USER_NAME ($USER_ID)"
+            echo "$LOG_COMMAND"
+            echo "End-Date: $END_DATE"
+          } >> $LOG_FILE
         else
-          echo -e " \e[1;31mSKIPPED\e[0m (Undo 'Upgrade' is currently unsupported')"
+          echo -e "$ERROR: Undo of Upgrade command \e[1;31mABORTED\e[0m"
         fi
-        IFS="$OLD_IFS"
-        echo
-        echo -e "\e[0m"
-        let "N=N+1"
-      done
-    fi
-  else
-    echo
-    echo "apt-rollback supports the Undo only of the Install, Remove and Purge commands"
-    echo "Upgrade commands aren't currently supported!"
-    echo
-    exit 1
+        IFS=$'\n'
+      fi
+      IFS="$OLD_IFS"
+      echo
+      echo -e "\e[0m"
+      let "N=N+1"
+    done
   fi
   exit
 }
@@ -169,11 +219,14 @@ if [ $# -eq 0 ]; then
 else
   case "$1" in
   "--last")
-    undo_last_command "$2" ;;
+    undo_last_command "$2"
+    ;;
   "--remove")
-    INSTALLED_PACKAGES=$(First_Installation "$2") ;;
+    INSTALLED_PACKAGES=$(First_Installation "$2")
+    ;;
   "--reinstall")
-    REMOVED_PACKAGES=$(First_Installation "$2") ;;
+    REMOVED_PACKAGES=$(First_Installation "$2")
+    ;;
   "--help")
     usage_message
     echo
@@ -189,12 +242,14 @@ else
     echo
     echo "  --help       Print this help"
     echo
-    exit ;;
+    exit
+    ;;
   *)
     echo "'$1' is a wrong parameter"
     echo
     usage_message
-    echo ;;
+    echo
+    ;;
   esac
 fi
 
