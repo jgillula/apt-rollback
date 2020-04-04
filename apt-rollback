@@ -11,8 +11,16 @@ set -e
 # Main Variables...
 # --------------------------------------------------------------------------------
 LOG_FILE="/var/log/apt/history.log"
+TMP_FILE="/tmp/dpkg.apt-rollback.log"
 VERSION="0.9.8" # Use always the 'x.y.z' format
 # --------------------------------------------------------------------------------
+
+# Change the APT Cache configuration to allow more .DEB file storing (and Downgrading)
+{
+  echo 'APT::Archives::MaxAge "0";'
+  echo 'APT::Archives::MinAge "0";'
+  echo 'APT::Archives::MaxSize "2000";'
+} > /etc/apt/apt.conf.d/99apt-rollback
 
 # Main Functions...
 # --------------------------------------------------------------------------------
@@ -67,7 +75,7 @@ function undo_last_command() {
       if [ ! "$LAST" == "1" ]; then
         echo -e -n "\e[1;34m#$N\e[0m "
       fi
-      echo -e "UNDOING: $COMMAND of \e[1;32m${PACKAGES:0:40}..."
+      echo -e "UNDOING: $COMMAND of \e[1;32m${PACKAGES:0:40}\e[0m ..."
       case $COMMAND in
       "Install") COMMAND="purge" ;;
       "Purge" | "Remove") COMMAND="install" ;;
@@ -75,11 +83,11 @@ function undo_last_command() {
       esac
       if [ ! "$COMMAND" == "" ]; then
         IFS="$OLD_IFS"
-#          apt-get $COMMAND -y -qq $PACKAGES >/dev/null &
+          apt-get $COMMAND -y -qq $PACKAGES >/dev/null &
         IFS=$'\n'
         #  echo dots while command is executing
         while ps | grep $! &>/dev/null; do
-          echo -n "."
+          echo -n -e "\e[1;32m.\e[0m"
           sleep 0.5
         done
       else
@@ -126,14 +134,31 @@ function undo_last_command() {
         if [ ! "$DPKG_COMMAND" == "" ]; then
           IFS="$OLD_IFS"
           USER_NAME="$SUDO_USER"
-          USER_ID="$(id -u $USER_NAME)"
+          USER_ID=$(id -u "$USER_NAME")
           START_DATE=$(date "+%Y-%m-%d  %H:%M:%S")
-          dpkg -i $DPKG_COMMAND >/dev/null &
-          IFS=$'\n'
-          while ps | grep $! &>/dev/null; do
-            echo -n "."
-            sleep 0.5
-          done
+          set +e
+          {
+            dpkg -i $DPKG_COMMAND >/dev/null 2>"$TMP_FILE" &
+            PID=$!
+            IFS=$'\n'
+            while ps | grep $PID &>/dev/null; do
+              echo -n -e "\e[1;32m.\e[0m"
+              sleep 0.5
+            done
+            wait $PID
+            EXIT_CODE=$?
+          }
+          ERRORS_LOG=$(cat "$TMP_FILE" | grep -i -v "warningo.*downgrad")
+          set -e
+          rm -f "$TMP_FILE"
+          if [ ! "$EXIT_CODE" == "0" ]; then
+            echo "$ERRORS_LOG"
+            exit 1
+          fi
+          if [ ! "$ERRORS_LOG" == "" ]; then
+            echo
+            echo -e "WARNINGS:\n$ERRORS_LOG"
+          fi
           END_DATE=$(date "+%Y-%m-%d  %H:%M:%S")
           {
             echo "Start-Date: $START_DATE"
