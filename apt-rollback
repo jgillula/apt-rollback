@@ -12,7 +12,7 @@
   LOG_FILE="/var/log/apt/history.log"
   PKG_DIR="/var/lib/apt-rollback/packages"
   TMP_FILE="/tmp/dpkg.apt-rollback.log"
-  VERSION="1.0.5" # Use always the 'x.y.z' format
+  VERSION="1.0.6" # Use always the 'x.y.z' format
   UBUNTU_NAME=$(cat /etc/os-release | grep "UBUNTU_CODENAME" | cut -d'=' -f2)
   ARCHITECTURE=$(dpkg --print-architecture)
   REPOSITORY="https://launchpad.net/ubuntu/$UBUNTU_NAME/$ARCHITECTURE/"
@@ -156,6 +156,8 @@ function Undo_Last_Command()
             PACKAGE_NAME=$(echo "$SINGLE_PACKAGE" | cut -d':' -f1)
             PACKAGE_ARC=$(echo "$SINGLE_PACKAGE" | cut -d':' -f2 | cut -d' ' -f1)
             PACKAGE_OLD_VER=$(echo "$SINGLE_PACKAGE" | cut -d'(' -f2 | cut -d',' -f1)
+            PACKAGE_OLD_VER_WEB=$(echo "$PACKAGE_OLD_VER" | sed "s/^.*://") # Remove the "epoch" Prefix
+            PACKAGE_OLD_VER_FILE=$(echo "$PACKAGE_OLD_VER" | sed "s/:/%3a/") # Replace the ':' "epoch" separator with the '%3a' html version
             PACKAGE_NEW_VER=$(echo "$SINGLE_PACKAGE" | cut -d',' -f2 | sed 's/^ //')
           }
 
@@ -174,11 +176,11 @@ function Undo_Last_Command()
           }
 
           # Check if the DEB file is stored in the APT System Cache...
-          DEB_FILE=$(ls /var/cache/apt/archives/${PACKAGE_NAME}_${PACKAGE_OLD_VER}_*.deb 2>/dev/null)
+          DEB_FILE=$(ls /var/cache/apt/archives/${PACKAGE_NAME}_${PACKAGE_OLD_VER_FILE}_*.deb 2>/dev/null)
 
           if [ "$DEB_FILE" == "" ]; then
             # Check if the DEB file is stored in the apt-rollback Packages Cache...
-            DEB_FILE=$(ls $PKG_DIR/${PACKAGE_NAME}_${PACKAGE_OLD_VER}_*.deb 2>/dev/null)
+            DEB_FILE=$(ls $PKG_DIR/${PACKAGE_NAME}_${PACKAGE_OLD_VER_WEB}_*.deb 2>/dev/null)
 
             # Try to retrieve the DEB file from the Standard Repositories...
             if [ "$DEB_FILE" == "" ]; then
@@ -187,21 +189,23 @@ function Undo_Last_Command()
               apt-get install --download-only $PACKAGE_NAME=$PACKAGE_OLD_VER &>/dev/null &
               Progress_Bar
               # Check if the DEB file is stored in the APT System Cache...
-              DEB_FILE=$(ls /var/cache/apt/archives/${PACKAGE_NAME}_${PACKAGE_OLD_VER}_*.deb 2>/dev/null)
+              DEB_FILE=$(ls /var/cache/apt/archives/${PACKAGE_NAME}_${PACKAGE_OLD_VER_FILE}_*.deb 2>/dev/null)
 
               # Try to retrieve the DEB file from Launchpad Web Site...
               if [ "$DEB_FILE" == "" ]; then
                 echo -e " \e[1;31m[ NOT FOUND ]\e[0m"
                 echo -n "  I'm looking on the Launchpad Web Site"
-                PACK_REP_ULR=$(wget -q -O- "$REPOSITORY/${PACKAGE_NAME}/$PACKAGE_OLD_VER" | grep -E "${PACKAGE_NAME}_${PACKAGE_OLD_VER}_(all|$ARCHITECTURE).deb" | sed "s/^.*href/href/" | cut -d'"' -f2)
-                PACKAGE_FILENAME=$(echo "$PACK_REP_ULR" | xargs basename)
-                rm -f "/tmp/$PACKAGE_FILENAME"
-                wget -q "$PACK_REP_ULR" -O "/tmp/$PACKAGE_FILENAME" &
-                Progress_Bar
-                MaintainCache
-                mv "/tmp/$PACKAGE_FILENAME" "$PKG_DIR" &>/dev/null
-                # Check if the DEB file is stored in the apt-rollback Packages Cache...
-                DEB_FILE=$(ls $PKG_DIR/${PACKAGE_NAME}_${PACKAGE_OLD_VER}_*.deb 2>/dev/null)
+                PACK_REP_ULR=$(wget -q -O- "$REPOSITORY/${PACKAGE_NAME}/$PACKAGE_OLD_VER_WEB" | grep -E "${PACKAGE_NAME}_${PACKAGE_OLD_VER_WEB}_(all|$ARCHITECTURE).deb" | sed "s/^.*href/href/" | cut -d'"' -f2)
+                PACKAGE_FILENAME=$(echo "$PACK_REP_ULR" | xargs basename &>/dev/null)
+                if [ ! "$PACKAGE_FILENAME" == "" ]; then
+                  rm -f "/tmp/$PACKAGE_FILENAME"
+                  wget -q "$PACK_REP_ULR" -O "/tmp/$PACKAGE_FILENAME" &
+                  Progress_Bar
+                  MaintainCache
+                  mv "/tmp/$PACKAGE_FILENAME" "$PKG_DIR" &>/dev/null
+                  # Check if the DEB file is stored in the apt-rollback Packages Cache...
+                  DEB_FILE=$(ls $PKG_DIR/${PACKAGE_NAME}_${PACKAGE_OLD_VER_WEB}_*.deb 2>/dev/null)
+                fi
 
                 if [ "$DEB_FILE" == "" ]; then
                   echo -e " \e[1;31m[ NOT FOUND ]\e[0m"
@@ -260,7 +264,9 @@ function Undo_Last_Command()
             echo "End-Date: $END_DATE"
           } >> $LOG_FILE
         else
-          echo -e "$ERROR: Undo of Upgrade command \e[1;31mABORTED\e[0m"
+          echo
+          echo -e "ERROR: Undo command \e[1;31mABORTED\e[0m"
+          echo
           exit 1
         fi
         IFS=$'\n'
