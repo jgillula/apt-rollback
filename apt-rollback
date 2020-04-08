@@ -182,7 +182,7 @@ function Undo_Last_Command()
 
             # Try to retrieve the DEB file from the Standard Repositories...
             if [ "$DEB_FILE" == "" ]; then
-              echo -e "  $PACKAGE_NAME Ver. $PACKAGE_OLD_VER currently \e[1;31mNOT AVAILABLE\e[0m on the local caches"
+              echo -e "  $PACKAGE_NAME ver. $PACKAGE_OLD_VER is currently \e[1;31mNOT AVAILABLE\e[0m on the local caches"
               echo -n "  I'm looking in the Standard Repositories"
               apt-get install --download-only $PACKAGE_NAME=$PACKAGE_OLD_VER &>/dev/null &
               Progress_Bar
@@ -191,8 +191,8 @@ function Undo_Last_Command()
 
               # Try to retrieve the DEB file from Launchpad Web Site...
               if [ "$DEB_FILE" == "" ]; then
-                echo -e " \e[1;31m[ NOT FOUND! ]\e[0m"
-                echo -n "  I'm looking on Launchpad Web Site"
+                echo -e " \e[1;31m[ NOT FOUND ]\e[0m"
+                echo -n "  I'm looking on the Launchpad Web Site"
                 PACK_REP_ULR=$(wget -q -O- "$REPOSITORY/${PACKAGE_NAME}/$PACKAGE_OLD_VER" | grep -E "${PACKAGE_NAME}_${PACKAGE_OLD_VER}_(all|$ARCHITECTURE).deb" | sed "s/^.*href/href/" | cut -d'"' -f2)
                 PACKAGE_FILENAME=$(echo "$PACK_REP_ULR" | xargs basename)
                 rm -f "/tmp/$PACKAGE_FILENAME"
@@ -204,14 +204,14 @@ function Undo_Last_Command()
                 DEB_FILE=$(ls $PKG_DIR/${PACKAGE_NAME}_${PACKAGE_OLD_VER}_*.deb 2>/dev/null)
 
                 if [ "$DEB_FILE" == "" ]; then
-                  echo -e " \e[1;31m[ NOT FOUND! ]\e[0m"
+                  echo -e " \e[1;31m[ NOT FOUND ]\e[0m"
                   DPKG_COMMAND=""
                   break
                 else
-                  echo -e " \e[1;32m[ FOUND! ]\e[0m"
+                  echo -e " \e[1;32m[ FOUND ]\e[0m"
                 fi
               else
-                echo -e " \e[1;32m[ FOUND! ]\e[0m"
+                echo -e " \e[1;32m[ FOUND ]\e[0m"
               fi
             fi
           fi
@@ -239,12 +239,16 @@ function Undo_Last_Command()
           ERRORS_LOG=$(cat "$TMP_FILE" | grep -i -v "warning.*downgrad")
           rm -f "$TMP_FILE"
           if [ ! "$EXIT_CODE" == "0" ]; then
+            echo "ERRORS:"
             echo "$ERRORS_LOG"
             exit 1
+          else
+            echo " done"
           fi
           if [ ! "$ERRORS_LOG" == "" ]; then
             echo
-            echo -e "WARNINGS:\n$ERRORS_LOG"
+            echo "WARNINGS:"
+            echo "$ERRORS_LOG"
           fi
           END_DATE=$(date "+%Y-%m-%d  %H:%M:%S")
           {
@@ -262,14 +266,12 @@ function Undo_Last_Command()
         IFS=$'\n'
       fi
       IFS="$OLD_IFS"
-      echo
       echo -e "\e[0m"
       let "N=N+1"
     done
+    echo "Successfully Undone!"
+    echo
   fi
-  echo
-  echo "All APT commands successfully Undone!"
-  echo
   exit
 }
 
