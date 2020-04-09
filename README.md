@@ -2,7 +2,6 @@
 
 Undo the last APT command or a specified one
 
-
     Usage: apt-rollback [--last <n>] [--remove/--reinstall package-name] [--help]
 
       --last       Undo the last <n> APT commands
@@ -17,14 +16,14 @@ Undo the last APT command or a specified one
 
       --help       Print the help
 
-### TO INSTALL:
+## TO INSTALL
 
-    wget https://gitlab.com/fabio.dellaria/apt-rollback/-/raw/master/apt-rollback && chmod +x ./apt-rollback
+    wget https://gitlab.com/fabio.dellaria/apt-rollback/-/raw/master/apt-rollback -O ./apt-rollback && chmod +x ./apt-rollback
 
-### TO USE:
+## TO USE
 
     ./apt-rollback
 
-### A Little Demo...
+## A Little Demo
 
 ![Demo Image](https://gitlab.com/fabio.dellaria/apt-rollback/-/raw/master/apt-rollback.gif)
