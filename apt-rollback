@@ -8,15 +8,16 @@
 # Main Variables...
 # --------------------------------------------------------------------------------
 {
-  CACHE_SIZE="2000" # In MBytes
+  MAX_CACHE_SIZE="2000" # In MBytes
   LOG_FILE="/var/log/apt/history.log"
   PKG_DIR="/var/lib/apt-rollback/packages"
   TMP_FILE="/tmp/dpkg.apt-rollback.log"
-  VERSION="1.0.6" # Use always the 'x.y.z' format
+  VERSION="1.0.10" # Use always the 'x.y.z' format
   UBUNTU_NAME=$(cat /etc/os-release | grep "UBUNTU_CODENAME" | cut -d'=' -f2)
   ARCHITECTURE=$(dpkg --print-architecture)
   REPOSITORY="https://launchpad.net/ubuntu/$UBUNTU_NAME/$ARCHITECTURE/"
   RESULT=""
+  DAFAULT_IFS="$IFS"
 }
 # --------------------------------------------------------------------------------
 
@@ -33,8 +34,10 @@ mkdir -p "$PKG_DIR"
 # --------------------------------------------------------------------------------
 function MaintainCache ()
 {
+  SAVED_IFS="$IFS"
+  IFS="$DAFAULT_IFS"
   MBYTE=$((1024*1024))
-  CACHE_SIZE=$((CACHE_SIZE*MBYTE))
+  CACHE_SIZE=$((MAX_CACHE_SIZE*MBYTE))
   DIR_SIZE=$(du -s "$PKG_DIR" 2>/dev/null | grep -o -E "[0-9]+")
   DIR_SIZE=$((DIR_SIZE*1024))
   PACKAGES=$(ls -rt "$PKG_DIR")
@@ -48,6 +51,7 @@ function MaintainCache ()
       break
     fi
   done
+  IFS="$SAVED_IFS"
 }
 
 function Progress_Bar ()
@@ -89,7 +93,6 @@ function Undo_Last_Command()
 
   # Get the last Compressed and Plain-Text Log APT commands
   {
-    OLD_IFS="$IFS"
     if [ -f "$LOG_FILE.1.gz" ]; then
       COMMANDS_LIST_GZIP=$(zgrep -E "(Install|Remove|Purge|Upgrade|Downgrade): " "$LOG_FILE.1.gz" | tail -"$LAST")"\n"
     else
@@ -97,7 +100,6 @@ function Undo_Last_Command()
     fi
     COMMANDS_LIST_PLAIN=$(grep -E "(Install|Remove|Purge|Upgrade|Downgrade): " "$LOG_FILE" | tail -"$LAST")
     COMMANDS_LIST=$(echo -e "$COMMANDS_LIST_GZIP$COMMANDS_LIST_PLAIN" | tail -"$LAST" | tac)
-    IFS=$'\n'
   }
 
   # List last <n> APT commands
@@ -105,6 +107,7 @@ function Undo_Last_Command()
     echo "The last$COUNT APT command$PLUS, performed the following Package$PLUS operation$PLUS..."
     echo
     N=0
+    IFS=$'\n'
     for COMMAND_LINE in $COMMANDS_LIST; do
       let "N=N+1"
       LINE=$(echo -e "$COMMAND_LINE" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
@@ -136,7 +139,7 @@ function Undo_Last_Command()
 
       # UNDO Install/Remove/Purge...
       if [ "$COMMAND" == "install" ] || [ "$COMMAND" == "purge" ]; then
-        IFS="$OLD_IFS"
+        IFS="$DEFAULT_IFS"
           apt-get $COMMAND -y -qq $PACKAGES >/dev/null &
         IFS=$'\n'
         Progress_Bar
@@ -184,10 +187,11 @@ function Undo_Last_Command()
 
             # Try to retrieve the DEB file from the Standard Repositories...
             if [ "$DEB_FILE" == "" ]; then
-              echo -e "  $PACKAGE_NAME ver. $PACKAGE_OLD_VER is currently \e[1;31mNOT AVAILABLE\e[0m on the local caches"
+              echo -e "  $PACKAGE_NAME ver. $PACKAGE_OLD_VER is currently \e[1;31mNOT AVAILABLE\e[0m on the Local Caches"
               echo -n "  I'm looking in the Standard Repositories"
-              apt-get install --download-only $PACKAGE_NAME=$PACKAGE_OLD_VER &>/dev/null &
+              apt-get install -y -qq --download-only --allow-downgrades $PACKAGE_NAME=$PACKAGE_OLD_VER &>/dev/null &
               Progress_Bar
+
               # Check if the DEB file is stored in the APT System Cache...
               DEB_FILE=$(ls /var/cache/apt/archives/${PACKAGE_NAME}_${PACKAGE_OLD_VER_FILE}_*.deb 2>/dev/null)
 
@@ -195,13 +199,12 @@ function Undo_Last_Command()
               if [ "$DEB_FILE" == "" ]; then
                 echo -e " \e[1;31m[ NOT FOUND ]\e[0m"
                 echo -n "  I'm looking on the Launchpad Web Site"
-                PACK_REP_ULR=$(wget -q -O- "$REPOSITORY/${PACKAGE_NAME}/$PACKAGE_OLD_VER_WEB" | grep -E "${PACKAGE_NAME}_${PACKAGE_OLD_VER_WEB}_(all|$ARCHITECTURE).deb" | sed "s/^.*href/href/" | cut -d'"' -f2)
-                PACKAGE_FILENAME=$(echo "$PACK_REP_ULR" | xargs basename &>/dev/null)
+                PACK_REP_ULR=$(wget -q -O- "$REPOSITORY${PACKAGE_NAME}/$PACKAGE_OLD_VER" | grep "${PACKAGE_NAME}_${PACKAGE_OLD_VER_WEB}_" | grep -E "(all|$ARCHITECTURE).deb" | sed "s/^.*href/href/" | cut -d'"' -f2)
+                PACKAGE_FILENAME=$(echo "$PACK_REP_ULR" | xargs basename 2>/dev/null)
                 if [ ! "$PACKAGE_FILENAME" == "" ]; then
                   rm -f "/tmp/$PACKAGE_FILENAME"
                   wget -q "$PACK_REP_ULR" -O "/tmp/$PACKAGE_FILENAME" &
                   Progress_Bar
-                  MaintainCache
                   mv "/tmp/$PACKAGE_FILENAME" "$PKG_DIR" &>/dev/null
                   # Check if the DEB file is stored in the apt-rollback Packages Cache...
                   DEB_FILE=$(ls $PKG_DIR/${PACKAGE_NAME}_${PACKAGE_OLD_VER_WEB}_*.deb 2>/dev/null)
@@ -228,7 +231,7 @@ function Undo_Last_Command()
         done
 
         if [ ! "$DPKG_COMMAND" == "" ]; then
-          IFS="$OLD_IFS"
+          IFS="$DEFAULT_IFS"
           USER_NAME="$SUDO_USER"
           USER_ID=$(id -u "$USER_NAME")
           START_DATE=$(date "+%Y-%m-%d  %H:%M:%S")
@@ -271,10 +274,11 @@ function Undo_Last_Command()
         fi
         IFS=$'\n'
       fi
-      IFS="$OLD_IFS"
+      IFS="$DEFAULT_IFS"
       echo -e "\e[0m"
       let "N=N+1"
     done
+    MaintainCache
     echo "Successfully Undone!"
     echo
   fi
