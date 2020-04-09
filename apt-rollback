@@ -12,11 +12,11 @@
   LOG_FILE="/var/log/apt/history.log"
   PKG_DIR="/var/lib/apt-rollback/packages"
   TMP_FILE="/tmp/dpkg.apt-rollback.log"
-  VERSION="1.0.15" # Use always the 'x.y.z' format
+  VERSION="1.0.16" # Use always the 'x.y.z' format
   UBUNTU_NAME=$(cat /etc/os-release | grep "UBUNTU_CODENAME" | cut -d'=' -f2)
   ARCHITECTURE=$(dpkg --print-architecture)
   REPOSITORY="https://launchpad.net/ubuntu/$UBUNTU_NAME/$ARCHITECTURE/"
-  VERSION_FILE="/var/log/installer/version"
+  VERSION_FILE="/var/log/installer/$(ls -t /var/log/installer/ 2>/dev/null | head -n 1)"
   INSTALLATION_DATE=$(date -r $VERSION_FILE "+%Y-%m-%d  %H:%M:%S" 2>/dev/null)
   RESULT=""
   DEFAULT_IFS="$IFS"
@@ -368,7 +368,6 @@ function Initial_Checks()
   fi
   if [ "$INSTALLATION_DATE" == "" ]; then 
     echo "WARNING: Cannot determinate the OS Installation Date"
-    echo "         '$VERSION_FILE' file not found"
     echo "         This will prevent to block UNDOing of Installation Packages"
     echo
   fi
