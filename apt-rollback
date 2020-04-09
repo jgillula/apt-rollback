@@ -12,10 +12,12 @@
   LOG_FILE="/var/log/apt/history.log"
   PKG_DIR="/var/lib/apt-rollback/packages"
   TMP_FILE="/tmp/dpkg.apt-rollback.log"
-  VERSION="1.0.12" # Use always the 'x.y.z' format
+  VERSION="1.0.15" # Use always the 'x.y.z' format
   UBUNTU_NAME=$(cat /etc/os-release | grep "UBUNTU_CODENAME" | cut -d'=' -f2)
   ARCHITECTURE=$(dpkg --print-architecture)
   REPOSITORY="https://launchpad.net/ubuntu/$UBUNTU_NAME/$ARCHITECTURE/"
+  VERSION_FILE="/var/log/installer/version"
+  INSTALLATION_DATE=$(date -r $VERSION_FILE "+%Y-%m-%d  %H:%M:%S" 2>/dev/null)
   RESULT=""
   DEFAULT_IFS="$IFS"
 }
@@ -94,27 +96,39 @@ function Undo_Last_Command()
   # Get the last Compressed and Plain-Text Log APT commands
   {
     if [ -f "$LOG_FILE.1.gz" ]; then
-      COMMANDS_LIST_GZIP=$(zgrep -E "(Install|Remove|Purge|Upgrade|Downgrade): " "$LOG_FILE.1.gz" | tail -"$LAST")"\n"
+      COMMAND_GZIP=$(zcat "$LOG_FILE.1.gz")"\n"
     else
-      COMMANDS_LIST_GZIP=""
+      COMMAND_GZIP=""
     fi
-    COMMANDS_LIST_PLAIN=$(grep -E "(Install|Remove|Purge|Upgrade|Downgrade): " "$LOG_FILE" | tail -"$LAST")
-    COMMANDS_LIST=$(echo -e "$COMMANDS_LIST_GZIP$COMMANDS_LIST_PLAIN" | tail -"$LAST" | tac)
+    COMMAND_PLAIN=$(cat "$LOG_FILE")
+    COMMANDS_LIST=$(echo "$COMMAND_GZIP$COMMAND_PLAIN" | grep -A2 -E "^(Install|Remove|Purge|Downgrade|Upgrade): " | grep -v -E "^(Commandline|Requested-By|Start-Date|--|$)" | tail -"$((LAST*2))" | tac)
   }
 
   # List last <n> APT commands
   {
+    PKG_DATE=""
     echo "The last$COUNT APT command$PLUS, performed the following Package$PLUS operation$PLUS..."
     echo
     N=0
     IFS=$'\n'
     for COMMAND_LINE in $COMMANDS_LIST; do
+
+      if [[ $COMMAND_LINE = End-Date* ]]; then
+        PKG_DATE=$(echo "$COMMAND_LINE" | cut -d' ' -f2-) 
+        continue;
+      fi
+
+      if [[ "$PKG_DATE" < "$INSTALLATION_DATE" ]]; then
+        continue;
+      fi
+
       let "N=N+1"
       LINE=$(echo -e "$COMMAND_LINE" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
       COMMAND=$(echo "$LINE" | cut -d":" -f1)
       PACKAGES=$(echo "$LINE" | cut -d" " -f2-)
       echo -e -n "\e[1;34m#$N\e[0m: "
-      echo -e "$COMMAND of \e[1;32m$PACKAGES\e[0m"
+      FMT_DATE=$(echo "$PKG_DATE" | sed 's/  / /')
+      echo -e "$FMT_DATE - $COMMAND of \e[1;32m$PACKAGES\e[0m"
     done
     echo
   }
@@ -122,7 +136,18 @@ function Undo_Last_Command()
   Ask_Yes_No "Do you wish to Undo $PRONOUN?"
   if [ "$RESULT" == "y" ]; then
     N=1
+    PKG_DATE=""
     for COMMAND_LINE in $COMMANDS_LIST; do
+
+      if [[ $COMMAND_LINE = End-Date* ]]; then 
+        PKG_DATE=$(echo "$COMMAND_LINE" | cut -d' ' -f2-) 
+        continue;
+      fi
+
+      if [[ "$PKG_DATE" < "$INSTALLATION_DATE" ]]; then
+        continue;
+      fi
+
       # Showing Command to UNDO...
       {
         LINE=$(echo -e "$COMMAND_LINE" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
@@ -334,12 +359,18 @@ function First_Installation()
   echo "$COMMAND"
 }
 
-function Check_Log_File()
+function Initial_Checks()
 {
   if [ ! -f "$LOG_FILE" ]; then
     echo "The APT log file '$LOG_FILE' doesn't exist."
     echo
     exit 1
+  fi
+  if [ "$INSTALLATION_DATE" == "" ]; then 
+    echo "WARNING: Cannot determinate the OS Installation Date"
+    echo "         '$VERSION_FILE' file not found"
+    echo "         This will prevent to block UNDOing of Installation Packages"
+    echo
   fi
 }
 
@@ -375,7 +406,7 @@ echo "apt-rollback ver. $VERSION"
 echo "Undo the last APT commands or a specified one"
 echo
 
-Check_Log_File
+Initial_Checks
 
 if [ $# -eq 0 ]; then
   echo "No arguments supplied."
