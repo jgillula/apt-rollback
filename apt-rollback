@@ -111,6 +111,8 @@ function Undo_Last_Command()
     echo
     N=0
     IFS=$'\n'
+    echo -e "\n\n---\n$COMMANDS_LIST---\n\n\n"
+
     for COMMAND_LINE in $COMMANDS_LIST; do
 
       if [[ $COMMAND_LINE = End-Date* ]]; then
@@ -125,10 +127,23 @@ function Undo_Last_Command()
       let "N=N+1"
       LINE=$(echo -e "$COMMAND_LINE" | sed "s/[(][^)]*[)]//g" | sed "s/ ,//g" | sed 's/ *$//g')
       COMMAND=$(echo "$LINE" | cut -d":" -f1)
-      PACKAGES=$(echo "$LINE" | cut -d" " -f2-)
+      case $COMMAND in
+          Upgrade | Downgrade)
+              PACKAGES=$(echo $COMMAND_LINE | cut -d" " -f2- | sed "s/\([^[:space:]]*\) [(]\([^,]*\), \([^)]*\)[)]/\\\e[1;32m\1\\\e[0m=\\\e[1;34m\2\\\e[0m to \\\e[1;32m\1\\\e[0m=\\\e[1;34m\3\\\e[0m/g")
+              ;;
+          Install | Remove)
+              PACKAGES=$(echo $COMMAND_LINE | cut -d" " -f2- | sed "s/\([^[:space:]]*\) [(]\([^,)]*\)[^)]*[)]/\\\e[1;32m\1\\\e[0m=\\\e[1;34m\2\\\e[0m/g" | sed "s/,//g")
+              ;;
+          Purge)
+              PACKAGES=$(echo $COMMAND_LINE | cut -d" " -f2- | sed "s/\([^[:space:]]*\) [(]\([^,)]*\)[^)]*[)]/\1=\2/g" | sed "s/,//g" | sed -E "s/=([[:blank:]]+|$)/\1/g")
+              ;;
+          *)
+              PACKAGES=$COMMAND_LINE
+              ;;
+      esac
       echo -e -n "\e[1;34m#$N\e[0m: "
       FMT_DATE=$(echo "$PKG_DATE" | sed 's/  / /')
-      echo -e "$FMT_DATE - $COMMAND of \e[1;32m$PACKAGES\e[0m"
+      echo -e "$FMT_DATE - $COMMAND of $PACKAGES"
     done
     echo
   }
